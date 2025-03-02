@@ -1,4 +1,3 @@
-<script>
 (function() {
     var score = 0;
     var storageKey = "visitor_score";
@@ -45,4 +44,3 @@
 
     console.log("Visitor Score:", localStorage.getItem(storageKey));
 })();
-</script>
