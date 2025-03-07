@@ -1,48 +1,115 @@
-<script>
-(function() {
-    var score = 0;
-    var storageKey = "visitor_score";
+(function () {
+    let visitorData = {
+        timeSpent: 0,
+        sources: getStoredSources(),
+        isReturningUser: checkReturningUser(),
+        deviceBrand: getDeviceBrand(),
+        pageScrollDepth: 0,
+    };
 
-    function getGACookie() {
-        var match = document.cookie.match(/_ga=([^.]+)\./);
-        return match ? match[1] : null;
+    function getTrafficSource() {
+        const referrer = document.referrer;
+        if (!referrer) return "direct";
+        if (referrer.includes("google.")) return "organic";
+        if (referrer.includes("bing.") || referrer.includes("yahoo.")) return "organic";
+        if (referrer.includes("facebook.") || referrer.includes("instagram.")) return "social";
+        if (document.location.href.includes("gclid")) return "paid search";
+        if (document.location.href.includes("utm_source=display")) return "display";
+        if (document.location.href.includes("utm_source=dv360")) return "dv360";
+        if (document.location.href.includes("utm_source=email")) return "email";
+        return "referral";
     }
 
-    var gaCookie = getGACookie();
-    var isReturningUser = localStorage.getItem("ga_user") === gaCookie;
-
-    if (!gaCookie) {
-        console.log("GA cookie not found");
-        return;
-    }
-
-    if (!isReturningUser) {
-        localStorage.setItem("ga_user", gaCookie);
-        score += 1;
-    } else {
-        score += 1;
-    }
-
-    var referrer = document.referrer;
-    var isOrganic = /google|bing|yahoo|duckduckgo/.test(referrer);
-    var isDirect = referrer === "" || referrer === window.location.origin;
-
-    if (isOrganic || isDirect) {
-        score += 2;
-    }
-
-    var startTime = Date.now();
-    window.addEventListener("beforeunload", function() {
-        var timeSpent = (Date.now() - startTime) / 1000;
-        if (timeSpent > 100) {
-            var currentScore = parseInt(localStorage.getItem(storageKey) || "0", 10);
-            localStorage.setItem(storageKey, currentScore + 2);
+    function getStoredSources() {
+        let sources = JSON.parse(localStorage.getItem("visitorSources")) || [];
+        let newSource = getTrafficSource();
+        if (!sources.includes(newSource)) {
+            sources.push(newSource);
+            localStorage.setItem("visitorSources", JSON.stringify(sources));
         }
-    });
+        return sources;
+    }
 
-    var currentScore = parseInt(localStorage.getItem(storageKey) || "0", 10);
-    localStorage.setItem(storageKey, currentScore + score);
+    function checkReturningUser() {
+        let returning = localStorage.getItem("returningUser");
+        if (!returning) {
+            localStorage.setItem("returningUser", "true");
+            return false; // New user
+        }
+        return true; // Returning user
+    }
 
-    console.log("Visitor Score:", localStorage.getItem(storageKey));
+    function getDeviceBrand() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        if (userAgent.includes("iphone") || userAgent.includes("ipad")) return "apple";
+        if (userAgent.includes("pixel")) return "google";
+        if (userAgent.includes("oneplus")) return "oneplus";
+        if (userAgent.includes("samsung")) return "samsung";
+        return "other";
+    }
+
+    function getTotalTimeSpent() {
+        return parseInt(localStorage.getItem("totalTimeSpent")) || 0;
+    }
+
+    function updateTotalTimeSpent() {
+        let totalTime = getTotalTimeSpent() + 1;
+        localStorage.setItem("totalTimeSpent", totalTime);
+        visitorData.timeSpent = totalTime;
+        updateCategory();
+    }
+
+    function trackTimeSpent() {
+        setInterval(updateTotalTimeSpent, 1000); // Increase time every second
+    }
+
+    function trackScrollDepth() {
+        window.addEventListener("scroll", () => {
+            let scrolled = (window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
+            visitorData.pageScrollDepth = Math.max(visitorData.pageScrollDepth, Math.round(scrolled));
+            updateCategory();
+        });
+    }
+
+    function updateCategory() {
+        let { timeSpent, sources, isReturningUser, deviceBrand, pageScrollDepth } = visitorData;
+        let category = "Cold";
+
+        let hasOrganicVisit = sources.some(src => ["organic", "direct", "paid search"].includes(src));
+
+        if (
+            (timeSpent > 50 &&
+                hasOrganicVisit &&
+                ["apple", "google", "oneplus", "samsung"].includes(deviceBrand) &&
+                pageScrollDepth >= 70) ||
+            (timeSpent > 150 && hasOrganicVisit)
+        ) {
+            category = "Very Hot";
+        } else if (
+            (timeSpent > 50 && hasOrganicVisit && isReturningUser) ||
+            (timeSpent > 100 && isReturningUser) ||
+            (timeSpent > 50 && pageScrollDepth >= 75)
+        ) {
+            category = "Hot";
+        } else if (
+            (timeSpent > 50 && !isReturningUser) ||
+            (timeSpent > 20 && hasOrganicVisit && isReturningUser) ||
+            (timeSpent > 20 && pageScrollDepth >= 75)
+        ) {
+            category = "Warm";
+        }
+
+        if (sessionStorage.getItem("visitorCategory") !== category) {
+            sessionStorage.setItem("visitorCategory", category);
+            console.log("Visitor Category Updated:", category);
+        }
+    }
+
+    function initVisitorScoring() {
+        visitorData.timeSpent = getTotalTimeSpent();
+        trackTimeSpent();
+        trackScrollDepth();
+    }
+
+    initVisitorScoring();
 })();
-</script>
